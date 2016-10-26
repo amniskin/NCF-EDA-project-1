@@ -1,0 +1,11 @@
+This file will house a sort of todo list, where we will brainstorm on our plan of attack.
+
+Part 1: Read the data into a language-native format.
+
+The downloaded data comes in the convenient format of a bunch of csv's. These can be easy read in with read.csv or read_csv.
+
+- Try and read in all data at once?
+    -> No unique yearly identifier
+        - Can make one; 'year' as chr identifier
+    -> May be too big for R
+        - Won't know till we try
