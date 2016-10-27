@@ -1,5 +1,8 @@
 # This is the repo for our project so far.
 
+##NOTE:
+So as to avoid dealing with git merging, which we don't fully understand just yet, we're going to each write to our own files, then combine them into one file toward the end. So please, make a file with your name in it to code in.
+
 ## Enjoy
 
 Also, if you want to have anything ignored by git, just put it in a folder named `ignore`. So for instance, we'll put our data in there. You will have to create the folder first (since git will ignore it).
