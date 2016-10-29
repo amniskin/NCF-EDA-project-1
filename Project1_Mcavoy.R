@@ -443,6 +443,7 @@ dsub_03_clean <- filter(data.frame(dsub_03),
 	!is.na(CDR2), (CDR2)!="NULL"
 )
 
+dsub_03_clean[,2] <- as.character(dsub_03_clean[,2])
 dsub_03_clean[,3] <- as.numeric(as.character(dsub_03_clean[,3]))
 dsub_03_clean[,4] <- as.numeric(as.character(dsub_03_clean[,4]))
 dsub_03_clean[,5] <- as.numeric(as.character(dsub_03_clean[,5]))
@@ -461,49 +462,27 @@ dsub_03_clean <- dsub_03_clean[!unique_01,]
 unique_02 <- duplicated(dsub_03_clean$INSTNM)
 dsub_03_clean <- dsub_03_clean[!unique_02,]
 
+## Will change column names to easier to read
+colnames(dsub_03_clean) <- c("OPEID6", "INSTNM", "CONTROL", "NOTWORKING", "WORKING", "MEAN_EARNINGS", "MEDIAN_EARNINGS", "PERCENT10_EARNINGS", "PERCENT25_EARNINGS", "PERCENT75_EARNINGS", "PERCENT90_EARNINGS", "MEDIAN_DEBT", "NUM_DEBT", "DEFAULT2")
+
 dim(dsub_03_clean)
 head(dsub_03_clean)
 
 ## We are left with 3176 x 14 data.
 
 ## ---------------- 3 ---------------- ##
-## Want to normalize data.
+## Want to look at debt and earnings to begin with.
 
-head(data_1996_df$CDR2)
-names(data_1996_df)
+## making copy so can easily break and recover
+s2_data <- dsub_03_clean
+str(s2_data)
 
-## always keep OPEID6
+## Want to find highest debt and lowest debt schools
+s2_debt <- select(s2_data, INSTNM, MEDIAN_DEBT) %>% arrange(desc(MEDIAN_DEBT))
+head(s2_debt); tail(s2_debt)
 
-## ONLY PCIP. Melt into single column. Currelty only < PCIP10
-## This allows us to group data based on the classification program
-data_pcip <- as.data.frame(select(data_1996_df, OPEID6, matches("PCIP0.")))
-data_pcip_melt <- melt(data_pcip, id=c("OPEID6"))
-names(data_pcip_melt)
-
-filter out na's and null's
-dim(data_pcip_melt)
-data_pcip_melt <- data_pcip_melt %>% na.omit() %>% filter(value!="NULL")
-dim(data_pcip_melt)
-head(data_pcip_melt); tail(data_pcip_melt)
-
-## Matches CIP01.. BACHL, CERT1, etc. ^ matches start of name
-data_cip <- as.data.frame(select(data_1996_df, OPEID6, matches("^CIP0.")))
-names(data_cip)
-data_cip_melt <- melt(data_cip, id=c("OPEID6"))
-dim(data_cip_melt)
-names(data_cip_melt)
-data_cip_melt <- data_cip_melt %>% na.omit() %>% filter(value!="NULL")
-dim(data_cip_melt)
-head(data_cip_melt); tail(data_cip_melt)
-
-data_cpip_pip <- inner_join(data_pcip_melt, data_cip_melt, by="OPEID6")
-dim(data_cpip_pip)
-head(data_cpip_pip); tails(data_cpip_pip)
-
-
-
-
-
-
+## Want to find highest median earnings schools
+s2_earn <- select(s2_data, INSTNM, MEDIAN_EARNINGS, MEAN_EARNINGS) %>% arrange(desc(MEDIAN_EARNINGS))
+head(s2_earn); tail(s2_earn)
 
 
