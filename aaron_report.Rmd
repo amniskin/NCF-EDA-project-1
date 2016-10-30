@@ -1,0 +1,39 @@
+---
+title: "Project 1"
+author: "Aaron Niskin, Charlie Edelson, Chris Leonard"
+date: "October 26, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("~/Documents/courses/newCollege/current/eda/projects/project1")
+```
+
+```{r, cache=TRUE}
+r_formatting_sucks <- function(n) {
+  if(n < 10) {
+    return(paste("0", n, sep=""))
+  }
+  else {
+    return(n)
+  }
+}
+getFileName <- function(startYear) {
+  R_is_stupid <- paste("ignore/MERGED", startYear, "_", r_formatting_sucks((startYear + 1) %% 100), "_PP.csv", sep="")
+  return(R_is_stupid)
+}
+dataStartYears <- 1996:2014
+df = read.csv(getFileName(dataStartYears[1]))
+df$startYear = dataStartYears[1]
+for (year in dataStartYears[dataStartYears > dataStartYears[1]]){
+  tmp <- read.csv(getFileName(year))
+  tmp$startYear = year
+  df <- rbind(df, tmp)
+}
+rm(tmp)
+unique(df$startYear)
+```
