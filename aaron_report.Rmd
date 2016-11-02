@@ -9,11 +9,17 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, eval=TRUE}
+library(data.table)
+library(nnet)
+library(neuralnet)
+library(ellipse)
+library(ggplot2)
+library(dplyr)
 setwd("~/Documents/courses/newCollege/current/eda/projects/project1")
 ```
 
-```{r, cache=TRUE}
+```{r, eval=TRUE}
 r_formatting_sucks <- function(n) {
   if(n < 10) {
     return(paste("0", n, sep=""))
@@ -26,14 +32,332 @@ getFileName <- function(startYear) {
   R_is_stupid <- paste("ignore/MERGED", startYear, "_", r_formatting_sucks((startYear + 1) %% 100), "_PP.csv", sep="")
   return(R_is_stupid)
 }
-dataStartYears <- 1996:2014
-df = read.csv(getFileName(dataStartYears[1]))
-df$startYear = dataStartYears[1]
-for (year in dataStartYears[dataStartYears > dataStartYears[1]]){
-  tmp <- read.csv(getFileName(year))
-  tmp$startYear = year
-  df <- rbind(df, tmp)
+getFilesColumns <- function(years, cols, nullVals) {
+  getThisFile <- function(year) {
+    tmp <- read.csv(getFileName(year), na=nullVals, stringsAsFactors = FALSE)
+    tmp <- tmp[,cols]
+    tmp$startYear = year
+    return(tmp)
+  }
+  tmpDf <- getThisFile(years[1])
+  for (year in years[2:length(years)]){
+    tmpDf <- rbind(tmpDf, getThisFile(year))
+  }
+  tmpDf$startYear <- as.factor(tmpDf$startYear)
+  return(tmpDf)
 }
-rm(tmp)
-unique(df$startYear)
+
+dataStartYears <- 2000:2014
+csvNullVals = c("NULL", "PrivacySuppressed")
+desiredCols = c("FAMINC", "INEXPFTE", "TUITFTE", "AVGFACSAL", "C100_L4", "C100_4", "C150_L4", "C150_4", "C200_L4", "C200_4", "MD_EARN_WNE_P10")
+
+df = getFilesColumns(dataStartYears, desiredCols, csvNullVals)
+rm(dataStartYears)
+rm(csvNullVals)
+rm(desiredCols)
 ```
+
+```{r}
+minMaxScale <- function(dats) {
+  dmin = min(dats)
+  dmax = max(dats)
+  return((dats - dmin) / (dmax - dmin))
+}
+
+dfSample <- function(dats, num){
+  tmpInds <- sample(1:dim(dats)[1], num)
+  return(dats[tmpInds,])
+}
+```
+
+```{r, eval=FALSE, echo=FALSE}
+tmp = df$C100_4
+tmp[is.na(tmp)] = df[is.na(tmp), "C100_L4"]
+df$C100 = tmp
+df = df[,!(names(df) %in% c("C100_4", "C100_L4"))]
+
+tmp = df$C150_4
+tmp[is.na(tmp)] = df[is.na(tmp), "C150_L4"]
+df = df[,!(names(df) %in% c("C150_4", "C150_L4"))]
+df$C150 = tmp
+
+tmp = df$C200_4
+tmp[is.na(tmp)] = df[is.na(tmp), "C200_L4"]
+df = df[,!(names(df) %in% c("C200_4", "C200_L4"))]
+df$C200 = tmp
+
+rm(tmp)
+```
+
+```{r, cache=TRUE, warning=FALSE, eval=FALSE}
+qplot(C150_L4, C100_L4, data=df, alpha=I(0.1))
+
+qplot(C100_4, MD_EARN_WNE_P10, data=df, alpha=I(0.1), ylim=c(0,10^5))
+qplot(C150_4, MD_EARN_WNE_P10, data=df, alpha=I(0.1), ylim=c(0,10^5))
+qplot(C200_4, MD_EARN_WNE_P10, data=df, alpha=I(0.1), ylim=c(0,10^5))
+
+
+ggplot(data=df, aes(x=C150_4, y=MD_EARN_WNE_P10, color=startYear), ylim=c(0,10^5)) + geom_point(alpha=I(0.1)) + geom_smooth()
+```
+
+
+```{r}
+tmpMD <- median(df[complete.cases(df$C150_4),"MD_EARN_WNE_P10"], na.rm=TRUE)
+tmpDf = df[, c("C150_4", "AVGFACSAL", "MD_EARN_WNE_P10")]
+tmpDf = tmpDf[complete.cases(tmpDf),]
+tmpDf$EARNINGS_GT_MD = tmpDf$MD_EARN_WNE_P10 > tmpMD
+unique(tmpDf$EARNINGS_GT_MD)
+sum(!tmpDf$EARNINGS_GT_MD)
+sum(tmpDf$EARNINGS_GT_MD)
+
+tmpDf$scaled_avg_fac_sal = minMaxScale(tmpDf$AVGFACSAL)
+
+
+
+
+
+
+
+##### TRYING NEURAL NETS  
+sampleInds <- sample(1:dim(tmpDf)[1], floor(dim(tmpDf)[1] * 2.0 / 3.0))
+
+desiredCols <- c("scaled_avg_fac_sal", "C150_4")
+trainDf <- tmpDf[sampleInds,c("EARNINGS_GT_MD", desiredCols)]
+testDf <- tmpDf[-sampleInds,desiredCols]
+testRDf <- tmpDf[-sampleInds, c("EARNINGS_GT_MD", desiredCols)]
+
+nn <- neuralnet('EARNINGS_GT_MD ~ scaled_avg_fac_sal + C150_4', data=trainDf, hidden=c(2), linear.output = TRUE)
+
+plot(nn)
+
+pr.nn <- compute(nn, testDf)
+
+MSE.nn <- sum((testDf - pr.nn)^2)/nrow(testDf)
+
+qplot(testRDf, pr.nn$net.result)
+
+ggplot(data=testRDf, aes(x=C150_4, color=EARNINGS_GT_MD, y=scaled_avg_fac_sal), ylim=c(0,10^5)) + geom_point(alpha=I(0.08)) + geom_smooth()
+tmpPr_nn <- pr.nn$net.result * 1.0
+ggplot(aes(x=testRDf$C150_4, color=(tmpPr_nn > 0.5), y=testRDf$scaled_avg_fac_sal), ylim=c(0,10^5)) + geom_point(alpha=I(0.08)) + geom_smooth()
+
+###
+
+
+
+ggplot(data=tmpDf[tmpDf$EARNINGS_GT_MD == TRUE,], aes(x=C150_4, y=scaled_avg_fac_sal)) + geom_point(alpha=I(0.08)) 
+ggplot(data=tmpDf[tmpDf$EARNINGS_GT_MD == FALSE,], aes(x=C150_4, y=scaled_avg_fac_sal)) + geom_point(alpha=I(0.08))
+
+ggplot(data=tmpDf, aes(x=C150_4, color=EARNINGS_GT_MD, y=scaled_avg_fac_sal), ylim=c(0,10^5)) + geom_point(alpha=I(0.08)) + geom_smooth()
+
+
+#### Trying a elyptic logistic regression
+tmpFormula <- 'EARNINGS_GT_MD ~ c150_squared + c150_time_avgFacSal + avgFacSal_squared + C150_4 + AVGFACSAL'
+tmpLm <- lm(tmpFormula, data=tmpDf)
+plot(tmpLm)
+
+
+df_ell <- cbind(as.data.frame(with(tmpDf[!tmpDf$EARNINGS_GT_MD,],
+                                   ellipse(cor(C150_4, AVGFACSAL),
+                                           scale=c(sd(C150_4),0.5*sd(AVGFACSAL)), 
+                                           centre=c(mean(C150_4),mean(AVGFACSAL))))),
+                EARNINGS_GT_MD=FALSE)
+
+plt <- ggplot(data=tmpDf, aes(x=C150_4, y=AVGFACSAL, color=EARNINGS_GT_MD)) + geom_point(alpha=I(0.08))
+plt + geom_path(data=df_ell, aes(x=x, y=y), size=1, linetype=2)
+
+
+tmpGlm <- glm(EARNINGS_GT_MD ~ poly(C150_4,2) + C150_4:AVGFACSAL + poly(AVGFACSAL, 2), family=binomial(link='logit'), data=tmpDf)
+ggplot(as.data.frame(ellipse(tmpGlm)))
+df_ell_2 <- as.data.frame(ellipse(tmpGlm$coefficients))
+
+
+# df_ell <- data.frame()
+# for(g in levels(as.factor(tmpDf$EARNINGS_GT_MD))){
+#   df_ell <- rbind(df_ell, cbind(as.data.frame(with(tmpDf[tmpDf$EARNINGS_GT_MD==g,],
+#                                                    ellipse(cor(C150_4, AVGFACSAL),
+#                                                            scale=c(sd(C150_4),sd(AVGFACSAL)), 
+#                                                            centre=c(mean(C150_4),mean(AVGFACSAL))))),
+#                                 EARNINGS_GT_MD=g))
+# }
+
+
+
+
+tmpGlm <- glm('EARNINGS_GT_MD ~ c150_squared + c150_time_avgFacSal + avgFacSal_squared + C150_4 + AVGFACSAL', family=binomial(link='logit'), data=tmpDf)
+summary(tmpGlm)
+anova(tmpGlm, test='Chisq')
+
+
+tmpLm <- lm('EARNINGS_GT_MD ~ c150_squared + c150_time_avgFacSal + avgFacSal_squared + C150_4 + AVGFACSAL', data=tmpDf)
+summary(tmpLm)
+
+
+
+
+### Lower boundary 
+tmpYInt = 4050
+tmpSlope = -tmpYInt * 1.0 / 0.69
+ggplot(data=tmpDf, aes(x=C150_4, y=AVGFACSAL, color=EARNINGS_GT_MD)) + geom_point(alpha=I(0.08)) + geom_abline(slope=tmpSlope, intercept=tmpYInt)
+
+### C150_4 seems to be most important
+summary(lm(MD_EARN_WNE_P10 ~ C100_4 + C150_4 + C200_4, data=df))
+summary(lm(MD_EARN_WNE_P10 ~ C100_L4 + C150_L4 + C200_L4, data=df))
+
+qplot(C100_L4, MD_EARN_WNE_P10, data=df, alpha=I(0.1), ylim=c(0,10^5))
+qplot(C150_L4, MD_EARN_WNE_P10, data=df, alpha=I(0.1), ylim=c(0,10^5))
+qplot(C200_L4, MD_EARN_WNE_P10, data=df, alpha=I(0.1), ylim=c(0,10^5))
+
+
+sum(complete.cases(df))
+
+cdf = df[complete.cases(df),]
+
+qplot(C100, MD_EARN_WNE_P10, data=cdf, alpha=I(0.1), ylim=c(0,10^5))
+qplot(C150, MD_EARN_WNE_P10, data=cdf, alpha=I(0.1), ylim=c(0,10^5))
+qplot(C200, MD_EARN_WNE_P10, data=cdf, alpha=I(0.1), ylim=c(0,10^5))
+
+qplot(C100_4, AVGFACSAL, data=df, alpha=I(0.02))
+
+plt = ggplot(data=cdf)
+plt1 = plt + aes(C100, MD_EARN_WNE_P10, alpha=I(0.1))
+plt1
+
+qplot(C100, MD_EARN_WNE_P10, data=df, alpha=I(0.1))
+qplot(FAMINC, TUITFTE, data=df[df$TUITFTE < 5 * 10 ^ 5,], alpha=I(0.1))
+df[df$TUITFTE > 2*10^7,]
+boxplot(df$MD_EARN_WNE_P10)
+fullModel = lm(MD_EARN_WNE_P10 ~ AVGFACSAL + C150_4, data=df[,!(names(df) == "startYear")])
+steppedModel = step(fullModel, direction="backward")
+summary(steppedModel)
+
+mdSal = median(df$MD_EARN_WNE_P10, na.rm = TRUE)
+
+higherThanMD
+
+qplot(df$MD_EARN_WNE_P10, df$startYear)
+
+sum(complete.cases(df))
+
+df = df[complete.cases(df),]
+write.csv(x = df, file = "ignore/completeDf.csv", na = "NULL")
+qplot(FAMINC, MD_EARN_WNE_P10, data=df, alpha=I(0.08))
+qplot(log(FAMINC), log(MD_EARN_WNE_P10), data=df, alpha=I(0.08))
+qplot((FAMINC)^(1.0/3.0), MD_EARN_WNE_P10, data=df, alpha=I(0.08))
+summary(lm('log(MD_EARN_WNE_P10) ~ log(FAMINC)', data=df))
+tmp <- df$FAMINC^0.35566
+summary(lm(df$MD_EARN_WNE_P10 ~ tmp))
+cor(df$FAMINC, df$MD_EARN_WNE_P10)
+```
+
+```{r}
+qplot(INEXPFTE, FAMINC, data=df, alpha=I(0.1), xlim=c(0,5*10^4))
+summary(lm('INEXPFTE ~ FAMINC', data=df))
+summary(lm('MD_EARN_WNE_P10 ~ FAMINC + AVGFACSAL', data=df))
+cor(df)
+qplot(INEXPFTE, MD_EARN_WNE_P10, data=df[df$INEXPFTE < 1.0*10^5,])
+qplot(INEXPFTE, MD_EARN_WNE_P10, data=revDf[revDf$INEXPFTE < 1.0*10^5,], xlim=c(0,25*10^3), ylim=c(0,10^5), alpha=I(0.09))
+qplot(TUITFTE, MD_EARN_WNE_P10, data=revDf)
+qplot(AVGFACSAL, MD_EARN_WNE_P10, data=revDf, xlim=c(0,1.5*10^4), ylim=c(0,10^5), alpha=I(0.1))
+qplot(TUITFTE, INEXPFTE, data=revDf, xlim=c(0, 25*10^3), ylim=c(0,5*10^4))
+summary(lm('TUITFTE ~ INEXPFTE', data=revDf))
+ggplot(data=revDf[revDf$INEXPFTE < 1.0*10^5,], aes(x=INEXPFTE, y=MD_EARN_WNE_P10))
+qplot(AVGFACSAL, MD_EARN_WNE_P10, data=revDf)
+summary(lm('MD_EARN_WNE_P10 ~ AVGFACSAL', data=revDf))
+plot(lm('MD_EARN_WNE_P10 ~ AVGFACSAL', data=revDf))
+plot(lm('MD_EARN_WNE_P10 ~ TUITFTE', data=revDf))
+plot(lm('MD_EARN_WNE_P10 ~ AVGFACSAL', data=revDf[c(1:9557, 9559:17198, 17200:20528, 20530:dim(revDf)[1]),]))
+cor(revDf$MD_EARN_WNE_P10, revDf$AVGFACSAL, use="pairwise.complete.obs")
+```
+
+```{r, eval=FALSE}
+df = read.csv(getFileName(2005), na=c("NULL", "PrivacySuppressed"), stringsAsFactors = FALSE)
+unique(df$C200_4)
+```
+
+```{r, cache=TRUE, eval=FALSE}
+df <- as.data.table(read.csv("ignore/complete_data.csv"))
+```
+
+```{r, eval=FALSE}
+df <- as.data.table(read.csv(getFileName(2014), na=c("NULL", "PrivacySuppressed")))
+```
+
+```{r, eval=FALSE}
+subset(df, CITY == "Miami", c(INSTNM, ICLEVEL))
+subset(df, CITY == "Miami", c(INSTNM, PREDDEG))
+subset(df, CITY == "Miami" & INSTNM == "Florida Vocational Institute", c(INSTNM, CONTROL))
+subset(df, CITY == "Miami" & INSTNM == "Florida International University", c(INSTNM, CONTROL))
+subset(df, CITY == "Miami" & INSTNM == "Florida International University", c(INSTNM, SCH_DEG))
+```
+NOTE: 
+
+variable name | description | PageNo
+|:----:|:----:|:----:|
+| UNK | revenues / expenses | 8 |
+| CONTROL | 0: public, 1: nonprofit, 2: profit | 6 |
+| UNK | Retention Rates | 14 |
+| UNK | Income | 13 |
+| C200_4 | 20% Completioin 4-year | 20 |
+| C200_l4 | 20% Completioin less-than-4-year | 20 |
+| NPT4_PUB | Net price for public | 11 |
+| NPT4_PRIV | Net price for private | 11 |
+| NPT4i_* | Net price by quintile (i < 6) | 11 |
+| ADM_RATE_ALL | Admission rate accross campuses | 9 |
+| CCBASIC | Carnegie Classification | 9 |
+
+```{r, eval=FALSE}
+subset(df,TRUE, CIP01ASSOC)
+subset(df,TRUE, DISTANCEONLY)
+```
+
+```{r, eval=FALSE, results="hide"}
+pcipIndex <- 62:99
+fullModel <- lm(DEBT_MDN ~ ., data=subset(df, TRUE, c(1504,pcipIndex)))
+stepped <- step(fullModel, direction = "backward")
+```
+
+```{r, eval=FALSE}
+summary(stepped)
+```
+
+```{r, eval=FALSE, results='hide'}
+fullPubModel <- lm(NPT4_PUB ~ ., data=subset(df, TRUE, c(which(names(df) == "NPT4_PUB"), pcipIndex)))
+fullPrivModel <- lm(NPT4_PRIV ~ ., data=subset(df, TRUE, c(which(names(df) == "NPT4_PRIV"), pcipIndex)))
+pubStep <- step(fullPubModel, direction='backward')
+privStep <- step(fullPrivModel, direction='backward')
+```
+
+```{r, eval=FALSE}
+summary(pubStep)
+summary(privStep)
+```
+
+```{r, eval=FALSE}
+df$c200_total <- df$C200_4 
+df$c200_total[is.na(df$c200_total)] <- df$C200_L4[is.na(df$c200_total)]
+df$c150_total <- df$C150_4 
+df$c150_total[is.na(df$c150_total)] <- df$C150_L4[is.na(df$c150_total)]
+df$c100_total <- df$C100_4 
+df$c100_total[is.na(df$c100_total)] <- df$C100_L4[is.na(df$c100_total)]
+```
+
+The Carnegie rating and admission rates have pretty low R-Squared values in predicting completion rates.
+
+```{r, eval=FALSE, results='hide'}
+tmp200Model <- lm(c200_total ~ CCBASIC + ADM_RATE, data=df)
+tmp200Step <- step(tmp200Model, direction='backward')
+summary(tmp200Step)
+tmp150Model <- lm(c150_total ~ CCBASIC + ADM_RATE, data=df)
+tmp150Step <- step(tmp150Model, direction='backward')
+summary(tmp150Step)
+tmp100Model <- lm(c100_total ~ CCBASIC + ADM_RATE, data=df)
+tmp100Step <- step(tmp100Model, direction='backward')
+summary(tmp100Step)
+```
+
+```{r, eval=FALSE}
+summary(pubStep)
+summary(privStep)
+```
+
+
