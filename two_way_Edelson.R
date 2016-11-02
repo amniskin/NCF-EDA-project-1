@@ -17,7 +17,7 @@ ratio*100
 # look at MD alonge
 df %>% select(c(2)) %>% complete.cases() %>% sum()
 df %>% select(c(3)) %>% complete.cases() %>% sum()
-df %>% select(c(4)) %>% complete.cases() %>% sum()
+df %>% select(c(4)) %>% complete.cases() %>% sum()/nrow(df) * 100
 
 
 # fit an anova with HIGHDEG
