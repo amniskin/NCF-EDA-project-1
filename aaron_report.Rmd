@@ -58,25 +58,30 @@ rm(desiredCols)
 ```
 
 
+## Above/Below Cross School Median
 ```{r, echo=FALSE, warning=FALSE}
 adf = DF[, c("C150_4", "AVGFACSAL", "MD_EARN_WNE_P10")]
 adf = adf[complete.cases(adf),]
 tmpMD <- median(adf[complete.cases(adf$C150_4),"MD_EARN_WNE_P10"], na.rm=TRUE)
 adf$EARNINGS_GT_MD = adf$MD_EARN_WNE_P10 > tmpMD
 rm(tmpMD)
-plt1 <- ggplot(data=adf[adf$EARNINGS_GT_MD == TRUE,], aes(x=C150_4, y=AVGFACSAL), main="More than median") + geom_point(alpha=I(0.08)) 
-plt2 <- ggplot(data=adf[adf$EARNINGS_GT_MD == FALSE,], aes(x=C150_4, y=AVGFACSAL), main="Less than median") + geom_point(alpha=I(0.08))
+plt1 <- ggplot(data=adf[adf$EARNINGS_GT_MD == TRUE,], aes(x=C150_4, y=AVGFACSAL), main="More than median") + geom_point(alpha=I(0.08)) + ggtitle("Over Median Earnings")
+plt2 <- ggplot(data=adf[adf$EARNINGS_GT_MD == FALSE,], aes(x=C150_4, y=AVGFACSAL), main="Less than median") + geom_point(alpha=I(0.08)) + ggtitle("Below Median Earnings")
 grid.arrange(plt1, plt2, ncol=2)
-ggplot(data=adf, aes(x=C150_4, color=EARNINGS_GT_MD, y=AVGFACSAL), ylim=c(0,10^5)) + geom_point(alpha=I(0.08)) + geom_smooth()
 ```
 
+## In relation to Median Income (10 years out)
+```{r, echo=FALSE, warning=FALSE}
+ggplot(data=adf, aes(x=C150_4, color=EARNINGS_GT_MD, y=AVGFACSAL), ylim=c(0,10^5)) + geom_point(alpha=I(0.09)) + geom_smooth() + ggtitle("Average Faculty Salary VS 4-Year 150% Completion Rate")
+```
 
+## Family Income
 ```{r, echo=FALSE, warning=FALSE}
 adf = DF[,c("FAMINC", "MD_EARN_WNE_P10")]
 adf = adf[complete.cases(adf),]
 alm <- summary(lm(log(MD_EARN_WNE_P10) ~ log(FAMINC), data=adf))
 fstat <- paste("F-Stat: ", round(alm$fstatistic[[1]], digits=2))
 rsq   <- paste("R-Squared: ", round(alm$r.squared[[1]], digits=2))
-ggplot(data=adf, aes(x=log(FAMINC), y=log(MD_EARN_WNE_P10))) + geom_point(alpha=0.08) + xlim(9.5,12) + ylim(9.5,11.5) + annotate("text", x=11.5, y=10, label = fstat, size=5.5) + annotate("text", x=11.5, y=9.8, label = rsq, size=5.5)
+ggplot(data=adf, aes(x=log(FAMINC), y=log(MD_EARN_WNE_P10))) + geom_point(alpha=0.08) + xlim(9.5,12) + ylim(9.5,11.5) + annotate("text", x=11.5, y=10, label = fstat, size=5.5) + annotate("text", x=11.5, y=9.8, label = rsq, size=5.5) + ggtitle("log(Median Earnings) vs log(Median Family Income)")
 rm(adf)
 ```
