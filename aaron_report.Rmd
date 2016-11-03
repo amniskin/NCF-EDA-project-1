@@ -46,7 +46,7 @@ getFilesColumns <- function(years, cols, nullVals) {
 
 
 ```{r}
-dataStartYears <- 1996:2014
+dataStartYears <- 2010:2014
 csvNullVals = c("NULL", "PrivacySuppressed")
 desiredCols = c("FAMINC", "AVGFACSAL", "C150_4", "MD_EARN_WNE_P10")
 
@@ -58,7 +58,7 @@ rm(desiredCols)
 ```
 
 
-```{r}
+```{r, echo=FALSE, warning=FALSE}
 adf = DF[, c("C150_4", "AVGFACSAL", "MD_EARN_WNE_P10")]
 adf = adf[complete.cases(adf),]
 tmpMD <- median(adf[complete.cases(adf$C150_4),"MD_EARN_WNE_P10"], na.rm=TRUE)
@@ -71,9 +71,12 @@ ggplot(data=adf, aes(x=C150_4, color=EARNINGS_GT_MD, y=AVGFACSAL), ylim=c(0,10^5
 ```
 
 
-```{r}
+```{r, echo=FALSE, warning=FALSE}
 adf = DF[,c("FAMINC", "MD_EARN_WNE_P10")]
 adf = adf[complete.cases(adf),]
-ggplot(data=adf, aes(x=log(FAMINC), y=log(MD_EARN_WNE_P10))) + geom_point(alpha=0.08) + xlim(9.5,12) + ylim(9.5,11.5)
+alm <- summary(lm(log(MD_EARN_WNE_P10) ~ log(FAMINC), data=adf))
+fstat <- paste("F-Stat: ", round(alm$fstatistic[[1]], digits=2))
+rsq   <- paste("R-Squared: ", round(alm$r.squared[[1]], digits=2))
+ggplot(data=adf, aes(x=log(FAMINC), y=log(MD_EARN_WNE_P10))) + geom_point(alpha=0.08) + xlim(9.5,12) + ylim(9.5,11.5) + annotate("text", x=11.5, y=10, label = fstat, size=5.5) + annotate("text", x=11.5, y=9.8, label = rsq, size=5.5)
 rm(adf)
 ```
