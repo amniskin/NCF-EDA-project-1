@@ -10,27 +10,25 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r, eval=TRUE}
-library(ellipse)
 library(ggplot2)
 library(gridExtra)
-library(dplyr)
 setwd("~/Documents/courses/newCollege/current/eda/projects/project1")
 ```
 
 ```{r, eval=TRUE}
-r_formatting_sucks <- function(n) {
-  if(n < 10) {
-    return(paste("0", n, sep=""))
-  }
-  else {
-    return(n)
-  }
-}
-getFileName <- function(startYear) {
-  R_is_stupid <- paste("ignore/MERGED", startYear, "_", r_formatting_sucks((startYear + 1) %% 100), "_PP.csv", sep="")
-  return(R_is_stupid)
-}
 getFilesColumns <- function(years, cols, nullVals) {
+  r_formatting_sucks <- function(n) {
+    if(n < 10) {
+      return(paste("0", n, sep=""))
+    }
+    else {
+      return(n)
+    }
+  }
+  getFileName <- function(startYear) {
+    R_is_stupid <- paste("ignore/MERGED", startYear, "_", r_formatting_sucks((startYear + 1) %% 100), "_PP.csv", sep="")
+    return(R_is_stupid)
+  }
   getThisFile <- function(year) {
     tmp <- read.csv(getFileName(year), na=nullVals, stringsAsFactors = FALSE)
     tmp <- tmp[,cols]
@@ -48,11 +46,12 @@ getFilesColumns <- function(years, cols, nullVals) {
 
 
 ```{r}
-dataStartYears <- 2000:2014
+dataStartYears <- 1996:2014
 csvNullVals = c("NULL", "PrivacySuppressed")
-desiredCols = c("FAMINC", "INEXPFTE", "TUITFTE", "AVGFACSAL", "C100_L4", "C100_4", "C150_L4", "C150_4", "C200_L4", "C200_4", "MD_EARN_WNE_P10")
+desiredCols = c("FAMINC", "AVGFACSAL", "C150_4", "MD_EARN_WNE_P10")
 
-df = getFilesColumns(dataStartYears, desiredCols, csvNullVals)
+DF = getFilesColumns(dataStartYears, desiredCols, csvNullVals)
+rm(getFilesColumns)
 rm(dataStartYears)
 rm(csvNullVals)
 rm(desiredCols)
@@ -60,78 +59,21 @@ rm(desiredCols)
 
 
 ```{r}
-tmpMD <- median(df[complete.cases(df$C150_4),"MD_EARN_WNE_P10"], na.rm=TRUE)
-tmpDf = df[, c("C150_4", "AVGFACSAL", "MD_EARN_WNE_P10")]
-tmpDf = tmpDf[complete.cases(tmpDf),]
-tmpDf$EARNINGS_GT_MD = tmpDf$MD_EARN_WNE_P10 > tmpMD
+adf = DF[, c("C150_4", "AVGFACSAL", "MD_EARN_WNE_P10")]
+adf = adf[complete.cases(adf),]
+tmpMD <- median(adf[complete.cases(adf$C150_4),"MD_EARN_WNE_P10"], na.rm=TRUE)
+adf$EARNINGS_GT_MD = adf$MD_EARN_WNE_P10 > tmpMD
 rm(tmpMD)
+plt1 <- ggplot(data=adf[adf$EARNINGS_GT_MD == TRUE,], aes(x=C150_4, y=AVGFACSAL), main="More than median") + geom_point(alpha=I(0.08)) 
+plt2 <- ggplot(data=adf[adf$EARNINGS_GT_MD == FALSE,], aes(x=C150_4, y=AVGFACSAL), main="Less than median") + geom_point(alpha=I(0.08))
+grid.arrange(plt1, plt2, ncol=2)
+ggplot(data=adf, aes(x=C150_4, color=EARNINGS_GT_MD, y=AVGFACSAL), ylim=c(0,10^5)) + geom_point(alpha=I(0.08)) + geom_smooth()
 ```
 
 
 ```{r}
-minMaxScale <- function(dats) {
-  dmin = min(dats)
-  dmax = max(dats)
-  return((dats - dmin) / (dmax - dmin))
-}
-
-dfSample <- function(dats, num){
-  tmpInds <- sample(1:dim(dats)[1], num)
-  return(dats[tmpInds,])
-}
-```
-
-```{r, eval=FALSE, echo=FALSE}
-tmp = df$C100_4
-tmp[is.na(tmp)] = df[is.na(tmp), "C100_L4"]
-df$C100 = tmp
-df = df[,!(names(df) %in% c("C100_4", "C100_L4"))]
-
-tmp = df$C150_4
-tmp[is.na(tmp)] = df[is.na(tmp), "C150_L4"]
-df = df[,!(names(df) %in% c("C150_4", "C150_L4"))]
-df$C150 = tmp
-
-tmp = df$C200_4
-tmp[is.na(tmp)] = df[is.na(tmp), "C200_L4"]
-df = df[,!(names(df) %in% c("C200_4", "C200_L4"))]
-df$C200 = tmp
-
-rm(tmp)
-```
-
-
-```{r}
-#### Trying a elyptic logistic regression
-plt1 <- ggplot(data=tmpDf[tmpDf$EARNINGS_GT_MD == TRUE,], aes(x=C150_4, y=AVGFACSAL), main="More than median") + geom_point(alpha=I(0.08)) 
-plt2 <- ggplot(data=tmpDf[tmpDf$EARNINGS_GT_MD == FALSE,], aes(x=C150_4, y=AVGFACSAL), main="Less than median") + geom_point(alpha=I(0.08))
-
-grid.arrange(plt1, plt2, ncol=2, title(main="Average Faculty Salary vs 150% Completion (4 year)"))
-
-ggplot(data=tmpDf, aes(x=C150_4, color=EARNINGS_GT_MD, y=AVGFACSAL), ylim=c(0,10^5)) + geom_point(alpha=I(0.08)) + geom_smooth()
-
-df_ell <- cbind(as.data.frame(with(tmpDf[!tmpDf$EARNINGS_GT_MD,],
-                                   ellipse(cor(C150_4, AVGFACSAL),
-                                           scale=c(sd(C150_4),0.5*sd(AVGFACSAL)), 
-                                           centre=c(mean(C150_4),mean(AVGFACSAL))))),
-                EARNINGS_GT_MD=FALSE)
-
-plt <- ggplot(data=tmpDf, aes(x=C150_4, y=AVGFACSAL, color=EARNINGS_GT_MD)) + geom_point(alpha=I(0.08))
-plt + geom_path(data=df_ell, aes(x=x, y=y), size=1, linetype=2)
-
-tmpGlm <- glm(EARNINGS_GT_MD ~ poly(C150_4,2) + C150_4:AVGFACSAL + poly(AVGFACSAL, 2), family=binomial(link='logit'), data=tmpDf)
-summary(tmpGlm)
-anova(tmpGlm, test='Chisq')
-
-### C150_4 seems to be most important
-qplot(FAMINC, TUITFTE, data=df[df$TUITFTE < 5 * 10 ^ 5,], alpha=I(0.1))
-
-write.csv(x = df, file = "ignore/completeDf.csv", na = "NULL")
-qplot(FAMINC, MD_EARN_WNE_P10, data=df, alpha=I(0.08))
-qplot(log(FAMINC), log(MD_EARN_WNE_P10), data=df, alpha=I(0.08))
-summary(lm('log(MD_EARN_WNE_P10) ~ log(FAMINC)', data=df))
-qplot((FAMINC)^(0.415), MD_EARN_WNE_P10, data=df, alpha=I(0.08), xlim=c(45,130), ylim=c(0,7.5*10^4))
-qplot((FAMINC)^(0.415), MD_EARN_WNE_P10, data=df, alpha=I(0.08))
-tmp <- df$FAMINC^0.415
-summary(lm(df$MD_EARN_WNE_P10 ~ tmp))
+adf = DF[,c("FAMINC", "MD_EARN_WNE_P10")]
+adf = adf[complete.cases(adf),]
+ggplot(data=adf, aes(x=log(FAMINC), y=log(MD_EARN_WNE_P10))) + geom_point(alpha=0.08) + xlim(9.5,12) + ylim(9.5,11.5)
+rm(adf)
 ```
