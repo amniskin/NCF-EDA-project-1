@@ -1,0 +1,212 @@
+---
+title: "The Econonomic Return of Post Secondary Education"
+author: Aaron Niskin, Matthew McAvoy, Chris Leonard, Charles Edelson 
+date: 11/1/16
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(jpeg)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(ggrepel)
+library(gridExtra)
+
+```
+## College Scorecard <!--Chris-->
+* US Department of Education database focused on 7,800 institutions
+* Varying dimensions for each school
+* What is the value of return on schools?
+
+## College Scorecard
+* US Department of Education database focused on 7,800 institutions
+* Varying dimensions for each school
+* What is the value of return on schools?
+
+* Thesis: What are the relavent variable to perdict median income 10 years out? 
+
+## College Scorecard
+* US Department of Education database focused on 7,800 institutions
+* Varying dimensions for each school
+* What is the value of return on schools?
+
+* Thesis: What are the relavent variables that perdict median income 10 years out? 
+  + Median Income as Proxy for Worth
+  + Median less Sensitive to Outliers 
+
+## Limitations with College Scorecard
+* Database created in mid 1990s
+* Null Value 
+  + "", "NULL", "NA","PrivacySurppressed"
+  + PrivacySurppressed at Institution Level
+* Organized by year
+
+## Debt Analysis <!--Matthew -->
+
+* Subset on variables of interest
+* Earliest 10 year earnings available in 2007
+* Debt seems low compared to current national average - $29,000
+
+```{r, echo = FALSE}
+ 
+
+## --- Start Analysis --- ##
+years <- read.csv("C:\\Users\\Chris\\Desktop\\GSW\\DSMung\\project1\\Matt_pics\\cleaned_education.csv")
+
+
+## total average debt
+##years %>% summarise(total_avg_debt=mean(MEDIAN_DEBT))
+
+## Average debt and earnings by year
+debt_to_earnings <- years %>% group_by(YEAR) %>% 
+	summarise(avg_debt = mean(MEDIAN_DEBT), avg_earnings = mean(MEDIAN_EARNINGS))
+```
+
+## Earnings and Debt by Year
+```{r, warning=FALSE} 
+y01 <- ggplot(debt_to_earnings, aes(x=YEAR)) + 
+	geom_smooth(aes(y=avg_debt, size=1.3), method="lm", formula = y ~ splines::bs(x,3), se=FALSE, colour = "#FF9999") + 
+	geom_smooth(aes(y=avg_earnings, size=1.3), method="lm", formula = y ~ splines::bs(x,3), se=FALSE, colour = "darkred") + 
+	ylab("Dollars") + xlab("Year") + ggtitle("Earnings and debt by year")
+y01
+```
+
+
+
+
+## Relationship between debt and earnings
+```{r}
+y02 <- ggplot(data=years, aes(x=MEDIAN_DEBT)) + 
+	geom_smooth(aes(y=PERCENT10_EARNINGS), method="lm", se=FALSE, colour="darkgreen") + 
+	geom_smooth(aes(y=PERCENT25_EARNINGS), method="lm", se=FALSE, colour="green") + 
+	geom_smooth(aes(y=MEDIAN_EARNINGS), method="lm", se=FALSE, colour="lightgreen") + 
+	geom_smooth(aes(y=PERCENT75_EARNINGS), method="lm", se=FALSE, colour="pink") +
+	geom_smooth(aes(y=PERCENT90_EARNINGS), method="lm", se=FALSE, colour="purple") + 
+	ylab("Earnings") + xlab("Debt") + ggtitle("Relationship between debt and earnings")
+y02
+```
+
+## Plot of debt vs earnings by state
+```{r]}
+state_debt <- years %>% group_by(STATE) %>% summarise(avg_debt=mean(MEDIAN_DEBT), avg_earnings=mean(MEAN_EARNINGS)) %>% arrange(avg_debt)
+y03 <- ggplot(data=state_debt, aes(x=avg_debt, y=avg_earnings)) + 
+	geom_point(shape = 1, size = 2.5) + geom_text_repel(aes(label=STATE), size = 4) +
+	xlab("Debt") + ylab("Earnings") + ggtitle("Relationship between average state debt and earnings")
+y03
+```
+
+## Average debt showing top and bottom three states
+```{r}
+end_states <- state_debt %>% slice(c(1:3,52:54)) %>% arrange(avg_debt)
+y04 <- ggplot(data=end_states, aes(x=STATE, y=avg_debt)) + 
+	geom_bar(aes(fill=STATE), stat="identity") + 
+	scale_x_discrete(limits=c("PR","VI","WY","PA","VT","RI")) + 
+	ylab("Debt") + xlab("State") + ggtitle("Lowest and highest debt states")
+y04
+```
+
+## Comparision of Degree Levels
+* Benefit to getting higher degree?
+* Institutional Differences
+* Predominate Degree vs Highest Degree
+* How do these groupings affect Median Income?
+
+```{r, echo = FALSE, message=FALSE}
+df <- read_csv("C:\\Users\\Chris\\Desktop\\GSW\\DSMung\\project1\\Charles_picks\\anova_median.csv", na=c("","NULL","NA","PrivacySurppressed"))
+
+# enforce proper types
+df[c(5:7)] <- df %>% select(c(5:7)) %>% mutate_each(funs(as.factor))
+df[c(2:4)] <- df %>% select(c(2:4)) %>% mutate_each(funs(as.numeric))
+```
+
+## Highest Degree Offered
+* One-Way ANOVA
+* F-statistic = 2223; P-value < 2x10<sup>-16</sup>
+```{r, echo=FALSE, warning=FALSE}
+p1 <- ggplot(data=df[complete.cases(df),], aes(MD_EARN_WNE_P10))
+p1 + geom_histogram(binwidth=1000, col="blue") + facet_grid(HIGHDEG ~.) + xlim(0, 100000) + ggtitle("Histogram of Median Income Grouped By Highest Degree")
+```
+
+## Predominate Degree Offered
+* One-Way ANOVA
+* F-statistic = 2682; P-value < 2x10<sup>-16</sup> 
+```{r, echo=FALSE, warning=FALSE}
+p2 <- ggplot(data=df[complete.cases(df),], aes(MD_EARN_WNE_P10))
+p2 + geom_histogram(binwidth=1000, col="lightblue") + facet_grid(PREDDEG ~.) + xlim(0, 100000) + ggtitle("Histogram of Median Income Grouped By Predominate Degree")
+```
+
+
+
+
+
+```{r, eval=TRUE}
+getFilesColumns <- function(years, cols, nullVals) {
+  r_formatting_sucks <- function(n) {
+    if(n < 10) {
+      return(paste("0", n, sep=""))
+    }
+    else {
+      return(n)
+    }
+  }
+  getFileName <- function(startYear) {
+    R_is_stupid <- paste("C:\\Users\\Chris\\Desktop\\GSW\\DSMung\\project1\\ignore\\MERGED", startYear, "_", r_formatting_sucks((startYear + 1) %% 100), "_PP.csv", sep="")
+    return(R_is_stupid)
+  }
+  getThisFile <- function(year) {
+    tmp <- read.csv(getFileName(year), na=nullVals, stringsAsFactors = FALSE)
+    tmp <- tmp[,cols]
+    tmp$startYear = year
+    return(tmp)
+  }
+  tmpDf <- getThisFile(years[1])
+  for (year in years[2:length(years)]){
+    tmpDf <- rbind(tmpDf, getThisFile(year))
+  }
+  tmpDf$startYear <- as.factor(tmpDf$startYear)
+  return(tmpDf)
+}
+```
+
+
+```{r}
+dataStartYears <- 2010:2014
+csvNullVals = c("NULL", "PrivacySuppressed")
+desiredCols = c("FAMINC", "AVGFACSAL", "C150_4", "MD_EARN_WNE_P10")
+
+DF = getFilesColumns(dataStartYears, desiredCols, csvNullVals)
+rm(getFilesColumns)
+rm(dataStartYears)
+rm(csvNullVals)
+rm(desiredCols)
+```
+
+## Above/Below Cross School Median
+```{r, echo=FALSE, warning=FALSE}
+adf = DF[, c("C150_4", "AVGFACSAL", "MD_EARN_WNE_P10")]
+adf = adf[complete.cases(adf),]
+tmpMD <- median(adf[complete.cases(adf$C150_4),"MD_EARN_WNE_P10"], na.rm=TRUE)
+adf$EARNINGS_GT_MD = adf$MD_EARN_WNE_P10 > tmpMD
+rm(tmpMD)
+plt1 <- ggplot(data=adf[adf$EARNINGS_GT_MD == TRUE,], aes(x=C150_4, y=AVGFACSAL), main="More than median") + geom_point(alpha=I(0.08)) + ggtitle("Over Median Earnings")
+plt2 <- ggplot(data=adf[adf$EARNINGS_GT_MD == FALSE,], aes(x=C150_4, y=AVGFACSAL), main="Less than median") + geom_point(alpha=I(0.08)) + ggtitle("Below Median Earnings")
+grid.arrange(plt1, plt2, ncol=2)
+```
+
+## In relation to Median Income
+```{r, echo=FALSE, warning=FALSE}
+ggplot(data=adf, aes(x=C150_4, color=EARNINGS_GT_MD, y=AVGFACSAL), ylim=c(0,10^5)) + geom_point(alpha=I(0.09)) + geom_smooth() + ggtitle("Average Faculty Salary VS 4-Year 150% Completion Rate")
+```
+
+## Family Income
+```{r, echo=FALSE, warning=FALSE}
+adf = DF[,c("FAMINC", "MD_EARN_WNE_P10")]
+adf = adf[complete.cases(adf),]
+alm <- summary(lm(log(MD_EARN_WNE_P10) ~ log(FAMINC), data=adf))
+fstat <- paste("F-Stat: ", round(alm$fstatistic[[1]], digits=2))
+rsq   <- paste("R-Squared: ", round(alm$r.squared[[1]], digits=2))
+ggplot(data=adf, aes(x=log(FAMINC), y=log(MD_EARN_WNE_P10))) + geom_point(alpha=0.08) + xlim(9.5,12) + ylim(9.5,11.5) + annotate("text", x=11.5, y=10, label = fstat, size=5.5) + annotate("text", x=11.5, y=9.8, label = rsq, size=5.5) + ggtitle("log(Median Earnings) vs log(Median Family Income)")
+rm(adf)
+```
